@@ -1,0 +1,1731 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>バスケ審判シグナル練習アプリ (Rev 1.6)</title>
+  <style>
+    /* ==========================================
+       リセット & ベーススタイル（外部CDN完全非依存）
+       ========================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-dark: #0f172a;
+      --bg-panel: #1e293b;
+      --border-subtle: rgba(148, 163, 184, 0.28);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #f59e0b;
+      --accent-hover: #fbbf24;
+      --blue-start: #1d4ed8;
+      --blue-end: #1e3a8a;
+      --blue-border: #60a5fa;
+      --white-start: #ffffff;
+      --white-end: #f1f5f9;
+      --white-border: #94a3b8;
+    }
+
+    html, body {
+      width: 100%;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* モバイルでのタッチ遅延・誤反応防止を全インタラクティブ要素に適用 */
+    button, select, input, label, .touch-target {
+      touch-action: manipulation;
+      cursor: pointer;
+      -webkit-tap-highlight-color: rgba(245, 158, 11, 0.25);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .app-wrapper {
+      width: 100%;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 14px 14px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ==========================================
+       上部ヘッダー（リビジョン表示＆ステータス）
+       ========================================== */
+    .header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 10px 14px;
+    }
+
+    .app-title {
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: 0.02em;
+    }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .rev-badge {
+      font-size: 11px;
+      font-weight: 800;
+      background-color: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      padding: 2px 8px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: #10b981;
+      transition: transform 0.12s ease, background-color 0.12s ease;
+    }
+
+    .status-dot.is-flash {
+      background-color: #fbbf24;
+      transform: scale(1.6);
+    }
+
+    .count-badge {
+      font-size: 12px;
+      font-weight: 700;
+      background-color: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      padding: 2px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    /* ==========================================
+       画面中央メインカード（白 / 青 ユニフォーム風）
+       ========================================== */
+    .prompt-card {
+      position: relative;
+      width: 100%;
+      border-radius: 22px;
+      border: 3px solid var(--white-border);
+      padding: 22px 18px 20px;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .progress-track {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 5px;
+      background-color: rgba(0, 0, 0, 0.15);
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--accent);
+      transition: width 0.08s linear;
+    }
+
+    .prompt-card.theme-white {
+      background: linear-gradient(155deg, var(--white-start) 0%, var(--white-end) 100%);
+      border-color: #cbd5e1;
+      color: #0f172a;
+    }
+
+    .prompt-card.theme-blue {
+      background: linear-gradient(155deg, var(--blue-start) 0%, var(--blue-end) 100%);
+      border-color: var(--blue-border);
+      color: #ffffff;
+    }
+
+    .card-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .category-pill {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+    }
+
+    .theme-white .category-pill {
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+
+    .theme-blue .category-pill {
+      background-color: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+    }
+
+    .jersey-guide-chip {
+      font-size: 11px;
+      font-weight: 700;
+      opacity: 0.88;
+    }
+
+    /* チーム色 ＋ 背番号エリア */
+    .jersey-display {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 16px 12px;
+      border-radius: 16px;
+      margin-bottom: 16px;
+    }
+
+    .theme-white .jersey-display {
+      background-color: #ffffff;
+      border: 2px solid #cbd5e1;
+      box-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.06);
+    }
+
+    .theme-blue .jersey-display {
+      background-color: rgba(15, 23, 42, 0.32);
+      border: 2px solid rgba(147, 197, 253, 0.45);
+    }
+
+    .team-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 82px;
+      padding: 8px 14px;
+      border-radius: 12px;
+      font-weight: 900;
+    }
+
+    .theme-white .team-badge {
+      background-color: #ffffff;
+      border: 3px solid #1e3a8a;
+      color: #0f172a;
+    }
+
+    .theme-blue .team-badge {
+      background-color: #2563eb;
+      border: 3px solid #ffffff;
+      color: #ffffff;
+    }
+
+    .team-badge-sub {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      opacity: 0.75;
+    }
+
+    .team-badge-main {
+      font-size: 36px;
+      line-height: 1.1;
+    }
+
+    .jersey-number {
+      font-size: 78px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* コール内容 */
+    .call-box {
+      text-align: center;
+      padding: 12px 8px 6px;
+      border-top: 2px dashed rgba(128, 128, 128, 0.28);
+    }
+
+    .call-caption {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+
+    .call-title {
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1.25;
+      word-break: keep-all;
+    }
+
+    /* ==========================================
+       答え・ハンドシグナル図解パネル（3ステップ）
+       ========================================== */
+    .answer-panel {
+      display: none;
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 16px;
+      animation: fadeSlide 0.18s ease-out;
+    }
+
+    .answer-panel.is-visible {
+      display: block;
+    }
+
+    .theme-white .answer-panel {
+      background-color: #f8fafc;
+      border: 1px solid #cbd5e1;
+      color: #0f172a;
+    }
+
+    .theme-blue .answer-panel {
+      background-color: rgba(15, 23, 42, 0.68);
+      border: 1px solid rgba(147, 197, 253, 0.35);
+      color: #f8fafc;
+    }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .answer-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .signal-tag {
+      font-size: 11px;
+      font-weight: 900;
+      background-color: var(--accent);
+      color: #0f172a;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .sequence-summary {
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .step-card {
+      border-radius: 12px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .theme-white .step-card {
+      background-color: #ffffff;
+      border: 1px solid #cbd5e1;
+    }
+
+    .theme-blue .step-card {
+      background-color: rgba(30, 58, 138, 0.55);
+      border: 1px solid rgba(147, 197, 253, 0.3);
+    }
+
+    .step-badge {
+      font-size: 10px;
+      font-weight: 900;
+      background-color: var(--accent);
+      color: #0f172a;
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-bottom: 4px;
+      display: inline-block;
+    }
+
+    .svg-frame {
+      width: 92px;
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 2px 0 6px;
+    }
+
+    .svg-frame svg {
+      width: 92px;
+      height: 92px;
+      display: block;
+    }
+
+    .step-title {
+      font-size: 13px;
+      font-weight: 900;
+      margin-bottom: 2px;
+    }
+
+    .step-desc {
+      font-size: 11px;
+      line-height: 1.35;
+      opacity: 0.9;
+    }
+
+    .guide-footer {
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.55;
+      padding: 10px 12px;
+      border-radius: 10px;
+    }
+
+    .theme-white .guide-footer {
+      background-color: #e2e8f0;
+      color: #1e293b;
+    }
+
+    .theme-blue .guide-footer {
+      background-color: rgba(15, 23, 42, 0.58);
+      color: #e2e8f0;
+    }
+
+    /* ==========================================
+       メイン操作アクションボタン
+       ========================================== */
+    .action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn {
+      min-height: 56px;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: none;
+      padding: 0 12px;
+      transition: transform 0.08s ease, background-color 0.15s ease;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-answer {
+      background-color: #1e293b;
+      color: #fcd34d;
+      border: 2px solid rgba(245, 158, 11, 0.75);
+    }
+
+    .btn-next {
+      background-color: var(--accent);
+      color: #0f172a;
+      box-shadow: 0 6px 18px rgba(245, 158, 11, 0.3);
+    }
+
+    /* ==========================================
+       画面下部設定パネル
+       ========================================== */
+    .settings-panel {
+      background-color: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-top: 2px;
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 8px;
+    }
+
+    .settings-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #e2e8f0;
+    }
+
+    .auto-countdown-text {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fcd34d;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .settings-row {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .settings-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    .freq-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .auto-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .auto-sub-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #cbd5e1;
+      margin-top: 2px;
+      padding: 4px 0;
+    }
+
+    .auto-sub-option input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .control-select,
+    .control-toggle-btn {
+      width: 100%;
+      min-height: 42px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 10px;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+
+    .control-toggle-btn.is-active {
+      background-color: rgba(245, 158, 11, 0.24);
+      border-color: var(--accent);
+      color: #fde68a;
+    }
+
+    .category-chips {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .chip-btn {
+      min-height: 42px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background-color: #0f172a;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 6px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .chip-btn.is-selected {
+      background-color: rgba(59, 130, 246, 0.25);
+      border-color: #60a5fa;
+      color: #ffffff;
+    }
+
+    .filter-warning {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fca5a5;
+      min-height: 18px;
+    }
+
+    .shortcut-hint {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ==========================================
+       レスポンシブ調整（スマホ幅 <= 520px）
+       ========================================== */
+    @media (max-width: 520px) {
+      .freq-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .auto-controls {
+        grid-template-columns: 1fr;
+      }
+
+      .jersey-number {
+        font-size: 64px;
+      }
+
+      .call-title {
+        font-size: 25px;
+      }
+
+      .steps-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .step-card {
+        flex-direction: row;
+        text-align: left;
+        gap: 12px;
+        padding: 10px 12px;
+      }
+
+      .step-card-text {
+        flex: 1;
+      }
+
+      .svg-frame {
+        width: 76px;
+        height: 76px;
+        margin: 0;
+        flex-shrink: 0;
+      }
+
+      .svg-frame svg {
+        width: 76px;
+        height: 76px;
+      }
+
+      .btn {
+        font-size: 14px;
+        min-height: 52px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- 上部ヘッダー（リビジョン番号＆タッチインジケーター付き） -->
+    <header class="header-bar">
+      <div class="app-title">
+        <span>🏀 バスケ審判シグナル練習</span>
+      </div>
+      <div class="header-meta">
+        <span class="rev-badge" title="動作ステータス正常">
+          <span id="statusDot" class="status-dot"></span>
+          <span>Rev 1.6</span>
+        </span>
+        <span class="count-badge">練習: <span id="practiceCount">0</span>回</span>
+      </div>
+    </header>
+
+    <!-- 画面中央メインカード -->
+    <main id="promptCard" class="prompt-card theme-white" aria-live="polite">
+      <div class="progress-track">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+
+      <div class="card-top-row">
+        <span id="categoryBadge" class="category-pill">バイオレーション</span>
+        <span id="jerseyFingerShort" class="jersey-guide-chip">指の示し方を確認</span>
+      </div>
+
+      <!-- チーム色 ＋ 背番号 -->
+      <div class="jersey-display">
+        <div class="team-badge">
+          <span class="team-badge-sub">TEAM</span>
+          <span id="teamColorText" class="team-badge-main">白</span>
+        </div>
+        <div id="jerseyNumberText" class="jersey-number">24</div>
+      </div>
+
+      <!-- コール内容 -->
+      <div class="call-box">
+        <div class="call-caption">CALL / SIGNAL</div>
+        <h1 id="callNameText" class="call-title">トラベリング</h1>
+      </div>
+
+      <!-- 答え・ハンドシグナル図解（3ステップSVG） -->
+      <section id="answerPanel" class="answer-panel" aria-label="ハンドシグナル図解">
+        <div class="answer-header">
+          <span class="signal-tag">OFFICIAL SIGNAL</span>
+          <span id="sequenceText" class="sequence-summary"></span>
+        </div>
+
+        <div id="stepsGrid" class="steps-grid"></div>
+
+        <div id="guideFooter" class="guide-footer"></div>
+      </section>
+    </main>
+
+    <!-- メイン操作ボタン（インラインonclickで確実に反応） -->
+    <div class="action-row">
+      <button id="toggleAnswerBtn" type="button" class="btn btn-answer" onclick="window.appToggleAnswer()">
+        <span id="toggleAnswerLabel">👁 答え・図解を見る</span>
+      </button>
+      <button id="nextCallBtn" type="button" class="btn btn-next" onclick="window.appNextPrompt()">
+        <span>次のコールへ ▶</span>
+      </button>
+    </div>
+
+    <!-- 画面下部設定パネル -->
+    <section class="settings-panel" aria-label="練習設定パネル">
+      <div class="settings-header">
+        <span class="settings-title">⚙️ 練習設定・出題フィルター</span>
+        <span id="autoCountdownText" class="auto-countdown-text">手動モード</span>
+      </div>
+
+      <!-- 出題頻度バランス切替 -->
+      <div class="settings-row">
+        <span class="settings-label">出題頻度バランス（AOS中ファウルの重み調整）</span>
+        <div class="freq-grid">
+          <button id="freqFocusBtn" type="button" class="control-toggle-btn is-active" onclick="window.appSetFreqMode('aos_focus')">
+            AOS重点（推奨）
+          </button>
+          <button id="freqUniformBtn" type="button" class="control-toggle-btn" onclick="window.appSetFreqMode('uniform')">
+            均一ランダム
+          </button>
+          <button id="freqIntenseBtn" type="button" class="control-toggle-btn" onclick="window.appSetFreqMode('aos_intense')">
+            AOS集中（高頻度）
+          </button>
+        </div>
+      </div>
+
+      <!-- 自動送りモード -->
+      <div class="settings-row">
+        <span class="settings-label">自動送りモード</span>
+        <div class="auto-controls">
+          <button id="autoToggleBtn" type="button" class="control-toggle-btn" onclick="window.appToggleAuto()">
+            自動送り: OFF
+          </button>
+          <select id="autoIntervalSelect" class="control-select" aria-label="自動送り間隔" onchange="window.appChangeInterval(this.value)">
+            <option value="3">間隔: 3秒ごと</option>
+            <option value="5" selected>間隔: 5秒ごと</option>
+            <option value="8">間隔: 8秒ごと</option>
+            <option value="12">間隔: 12秒ごと</option>
+          </select>
+        </div>
+        <label class="auto-sub-option">
+          <input type="checkbox" id="autoRevealHalfCheck" checked onchange="window.appToggleHalfReveal(this.checked)" />
+          <span>自動送り時、残り半分で答え・図解を自動表示する</span>
+        </label>
+      </div>
+
+      <!-- 常に図解を表示 -->
+      <div class="settings-row">
+        <span class="settings-label">図解表示オプション</span>
+        <button id="alwaysShowBtn" type="button" class="control-toggle-btn" onclick="window.appToggleAlwaysShow()">
+          常に答え（図解）を表示: OFF
+        </button>
+      </div>
+
+      <!-- 出題カテゴリー絞り込みチップ -->
+      <div class="settings-row">
+        <span class="settings-label">出題カテゴリー絞り込み（タップでON/OFF）</span>
+        <div class="category-chips">
+          <button id="chip_aos_foul" type="button" class="chip-btn is-selected" onclick="window.appToggleCategory('aos_foul')">
+            ✓ AOS中ファウル
+          </button>
+          <button id="chip_pre_foul" type="button" class="chip-btn is-selected" onclick="window.appToggleCategory('pre_foul')">
+            ✓ AOS前ファウル
+          </button>
+          <button id="chip_violation" type="button" class="chip-btn is-selected" onclick="window.appToggleCategory('violation')">
+            ✓ バイオレーション
+          </button>
+          <button id="chip_count" type="button" class="chip-btn is-selected" onclick="window.appToggleCategory('count')">
+            ✓ カウント・ノーカウント
+          </button>
+        </div>
+        <div id="filterWarning" class="filter-warning" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <p class="shortcut-hint">
+      キーボード操作: [A] 答え・図解の開閉 ／ [Space] または [Enter] 次のコールへ
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      // ==========================================
+      // 1. 出題データ定義
+      // ==========================================
+      var TEAM_COLORS = ["白", "青"];
+      var JERSEY_NUMBERS = ["0", "00"];
+      for (var i = 1; i <= 99; i++) {
+        JERSEY_NUMBERS.push(String(i));
+      }
+
+      var CALL_LIST = [
+        // --- AOS中のファウル（高頻度対象） ---
+        {
+          name: "カウント、1ショット",
+          categories: ["aos_foul", "count"],
+          isViolation: false,
+          badge: "AOS中・バスケットカウント",
+          pose: "count_shot_1",
+          baseWeight: 4,
+          sequence: "カウント（得点成立） → 背番号 → 1ショット",
+          detail: "①片手を肩から振り下ろし得点カウント → ②ファウル宣告・テーブル前で色と背番号を提示 → ③人差し指1本を水平に示し1ショット。"
+        },
+        {
+          name: "2ショット",
+          categories: ["aos_foul"],
+          isViolation: false,
+          badge: "AOS中・フリースロー",
+          pose: "shot_2",
+          baseWeight: 4,
+          sequence: "ファウル宣告 → 背番号 → 2ショット",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号を提示 → ③片腕を水平に伸ばし指2本を立てて2ショット。"
+        },
+        {
+          name: "3ショット",
+          categories: ["aos_foul"],
+          isViolation: false,
+          badge: "AOS中・3Pフリースロー",
+          pose: "shot_3",
+          baseWeight: 2,
+          sequence: "ファウル宣告 → 背番号 → 3ショット",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号を提示 → ③片腕を水平に伸ばし指3本を立てて3ショット。"
+        },
+
+        // --- AOS前のファウル（標準頻度：重み1） ---
+        {
+          name: "ノーカウント（AOS前のファウル）",
+          categories: ["pre_foul", "count"],
+          isViolation: false,
+          badge: "得点不成立・スローイン",
+          pose: "nocount_foul",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → ノーカウント → 背番号・方向",
+          detail: "AOS（シュート動作）に入る前のファウル後に放たれたシュートのため得点不成立。①握り拳でファウル宣告 → ②両腕を胸の前で交差して左右に広げノーカウント → ③背番号提示とスローイン方向指示。"
+        },
+        {
+          name: "カウント、ノーショット",
+          categories: ["pre_foul", "count"],
+          isViolation: false,
+          badge: "得点成立・スローイン",
+          pose: "count_noshot",
+          baseWeight: 1,
+          sequence: "カウント（得点成立） → 背番号 → スローイン方向",
+          detail: "連続したシュート動作外のファウルだが得点は成立（ボーナス未達）。①片手を振り下ろし得点カウント → ②ファウル宣告・背番号提示 → ③フリースローなしでスローイン方向を指さす。"
+        },
+        {
+          name: "プッシング",
+          categories: ["pre_foul"],
+          isViolation: false,
+          badge: "ファウル（AOS前）",
+          pose: "pushing",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → 背番号 → プッシング → 方向",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号 → ③両手のひらで前に押す動作 → ④スローイン方向指示。"
+        },
+        {
+          name: "ホールディング",
+          categories: ["pre_foul"],
+          isViolation: false,
+          badge: "ファウル（AOS前）",
+          pose: "holding",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → 背番号 → ホールディング → 方向",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号 → ③片腕を下げ反対の手で手首をつかむ → ④スローイン方向指示。"
+        },
+        {
+          name: "イリーガル・ユース・オブ・ハンズ",
+          categories: ["pre_foul"],
+          isViolation: false,
+          badge: "ファウル（AOS前）",
+          pose: "illegal_hands",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → 背番号 → 手の不正使用 → 方向",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号 → ③片方の手首をもう片方の手で叩く動作 → ④スローイン方向指示。"
+        },
+        {
+          name: "ブロッキング",
+          categories: ["pre_foul"],
+          isViolation: false,
+          badge: "ファウル（AOS前）",
+          pose: "blocking",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → 背番号 → ブロッキング → 方向",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号 → ③両手を腰に当てる動作 → ④スローイン方向指示。"
+        },
+        {
+          name: "チャージング（オフェンスファウル）",
+          categories: ["pre_foul"],
+          isViolation: false,
+          badge: "オフェンスファウル",
+          pose: "charging",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → 背番号 → チャージング → 新攻撃方向",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号 → ③握り拳で反対の開いた手のひらを打つ → ④新攻撃方向を指さす。"
+        },
+        {
+          name: "イリーガル・スクリーン",
+          categories: ["pre_foul"],
+          isViolation: false,
+          badge: "ファウル（AOS前）",
+          pose: "illegal_screen",
+          baseWeight: 1,
+          sequence: "ファウル宣告 → 背番号 → イリーガルスクリーン → 方向",
+          detail: "①握り拳でファウル宣告 → ②テーブル前で色と背番号 → ③両腕を曲げて胸の前で交差させるスクリーン動作 → ④方向指示。"
+        },
+
+        // --- バイオレーション（標準頻度：重み1） ---
+        {
+          name: "ノーカウント（AOS前のバイオレーション）",
+          categories: ["violation", "count"],
+          isViolation: true,
+          badge: "得点不成立・バイオレーション",
+          pose: "nocount_violation",
+          baseWeight: 1,
+          sequence: "クロック停止 → ノーカウント → スローイン方向",
+          detail: "シュートリリース前にバイオレーションが発生していたため得点不成立。①開いた手のひらを上げてクロック停止 → ②両腕を胸の前でクロスして左右に広げノーカウント → ③スローイン方向を指さす（背番号伝達は不要）。"
+        },
+        {
+          name: "トラベリング",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "traveling",
+          baseWeight: 1,
+          sequence: "クロック停止 → トラベリング → 方向",
+          detail: "①開いた手のひらを上げてクロック停止 → ②胸の前で両拳を回転 → ③攻撃方向を指さす。"
+        },
+        {
+          name: "ダブルドリブル",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "double_dribble",
+          baseWeight: 1,
+          sequence: "クロック停止 → ダブルドリブル → 方向",
+          detail: "①クロック停止 → ②両手のひらを下に向け交互に上下させる → ③攻撃方向を指さす。"
+        },
+        {
+          name: "キャリング・ザ・ボール",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "carrying",
+          baseWeight: 1,
+          sequence: "クロック停止 → キャリング → 方向",
+          detail: "①クロック停止 → ②片手のひらを上向きから半回転させて返す → ③攻撃方向を指さす。"
+        },
+        {
+          name: "3秒バイオレーション",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "three_sec",
+          baseWeight: 1,
+          sequence: "クロック停止 → 3秒 → 方向",
+          detail: "①クロック停止 → ②片腕を前に伸ばし指を3本立てる → ③攻撃方向を指さす。"
+        },
+        {
+          name: "5秒バイオレーション",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "five_sec",
+          baseWeight: 1,
+          sequence: "クロック停止 → 5秒 → 方向",
+          detail: "①クロック停止 → ②片手を上げて指を5本すべて広げる → ③攻撃方向を指さす。"
+        },
+        {
+          name: "8秒バイオレーション",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "eight_sec",
+          baseWeight: 1,
+          sequence: "クロック停止 → 8秒 → 方向",
+          detail: "①クロック停止 → ②両手を上げて合計8本（5本＋3本）の指を示す → ③攻撃方向を指さす。"
+        },
+        {
+          name: "24秒バイオレーション",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "twentyfour_sec",
+          baseWeight: 1,
+          sequence: "クロック停止 → 24秒 → 方向",
+          detail: "①クロック停止 → ②片手の指先で同じ側の肩をタップ → ③攻撃方向を指さす。"
+        },
+        {
+          name: "バックコート・バイオレーション",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "backcourt",
+          baseWeight: 1,
+          sequence: "クロック停止 → バックコート → 方向",
+          detail: "①クロック停止 → ②片腕を体の前で左右に大きく振る → ③攻撃方向を指さす。"
+        },
+        {
+          name: "キックボール",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "kick_ball",
+          baseWeight: 1,
+          sequence: "クロック停止 → キックボール → 方向",
+          detail: "①クロック停止 → ②片足を軽く上げ人差し指で足先を指さす → ③攻撃方向を指さす。"
+        },
+        {
+          name: "アウト・オブ・バウンズ",
+          categories: ["violation"],
+          isViolation: true,
+          badge: "バイオレーション",
+          pose: "direction",
+          baseWeight: 1,
+          sequence: "クロック停止 → スローイン方向指示",
+          detail: "①開いた手のひらを上げてクロック停止 → ②ボールがラインを割った後の攻撃方向を指さす。"
+        }
+      ];
+
+      // ==========================================
+      // 2. 背番号の指の本数ガイド生成
+      // ==========================================
+      function getFingerGuide(numStr) {
+        if (numStr === "0") return "片手で「0」（丸）を作る";
+        if (numStr === "00") return "両手で「0」を2つ作る";
+        var n = Number(numStr);
+        if (n <= 5) return "片手で指を" + n + "本立てる";
+        if (n <= 10) return "両手で合計" + n + "本（5本＋" + (n - 5) + "本）";
+        if (n <= 15) return "右手1本 → 左手" + (n - 10) + "本";
+        var tens = Math.floor(n / 10);
+        var ones = n % 10;
+        var onesText = ones === 0 ? "0（丸）" : ones + "本";
+        return "右手" + tens + "本 → 左手" + onesText;
+      }
+
+      // ==========================================
+      // 3. カスタムSVG図解ジェネレーター
+      // ==========================================
+      function createRefereeSvg(pose, label) {
+        var safeLabel = label || "";
+        var body =
+          '<circle cx="60" cy="26" r="10" fill="currentColor" />' +
+          '<path d="M44 42 C44 38, 76 38, 76 42 L72 80 L48 80 Z" fill="currentColor" />' +
+          '<line x1="53" y1="80" x2="51" y2="110" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+          '<line x1="67" y1="80" x2="69" y2="110" stroke="currentColor" stroke-width="6" stroke-linecap="round" />';
+
+        var gesture = "";
+
+        if (pose === "stop_clock") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="84" y2="14" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<ellipse cx="85" cy="11" rx="5" ry="7" fill="#ef4444" />' +
+            '<path d="M95 24 L95 10" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />' +
+            '<polygon points="95,6 91,13 99,13" fill="#ef4444" />';
+        } else if (pose === "foul_fist") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="84" y2="15" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<circle cx="84" cy="12" r="6.5" fill="#ef4444" />' +
+            '<path d="M96 24 L96 10" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />' +
+            '<polygon points="96,6 92,13 100,13" fill="#ef4444" />';
+        } else if (pose === "number") {
+          gesture =
+            '<line x1="45" y1="44" x2="30" y2="26" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="90" y2="26" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<rect x="32" y="6" width="56" height="18" rx="5" fill="#ef4444" />' +
+            '<text x="60" y="19" text-anchor="middle" font-size="12" font-weight="900" fill="#ffffff">' + safeLabel + "</text>";
+        } else if (pose === "traveling") {
+          gesture =
+            '<path d="M45 44 L34 58 L52 58" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<path d="M75 44 L86 58 L68 58" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<circle cx="53" cy="58" r="4.5" fill="#ef4444" />' +
+            '<circle cx="67" cy="58" r="4.5" fill="#ef4444" />' +
+            '<path d="M44 48 A16 16 0 1 1 76 48" fill="none" stroke="#ef4444" stroke-width="3" stroke-dasharray="4 2" />' +
+            '<polygon points="78,51 72,45 81,43" fill="#ef4444" />';
+        } else if (pose === "double_dribble") {
+          gesture =
+            '<path d="M45 44 L28 52 L28 62" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<path d="M75 44 L92 48 L92 56" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="20" y1="63" x2="36" y2="63" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />' +
+            '<line x1="84" y1="57" x2="100" y2="57" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />' +
+            '<path d="M28 68 L28 78 M92 50 L92 40" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />' +
+            '<polygon points="28,82 24,75 32,75" fill="#ef4444" />' +
+            '<polygon points="92,36 88,43 96,43" fill="#ef4444" />';
+        } else if (pose === "carrying") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<path d="M75 44 L94 56 L104 52" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<path d="M96 42 A10 10 0 1 1 108 58" fill="none" stroke="#ef4444" stroke-width="3" />' +
+            '<polygon points="108,62 103,55 112,55" fill="#ef4444" />';
+        } else if (pose === "three_sec" || pose === "five_sec" || pose === "eight_sec") {
+          var sec = pose === "three_sec" ? "3" : pose === "five_sec" ? "5" : "8";
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="96" y2="36" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<circle cx="102" cy="24" r="12" fill="#ef4444" />' +
+            '<text x="102" y="29" text-anchor="middle" font-size="14" font-weight="900" fill="#ffffff">' + sec + "</text>";
+        } else if (pose === "twentyfour_sec") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<path d="M75 44 L92 52 L77 38" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<circle cx="76" cy="37" r="5.5" fill="#ef4444" />' +
+            '<path d="M88 26 L80 34" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />';
+        } else if (pose === "backcourt") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="52" y2="60" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<path d="M36 60 L84 60" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round" />' +
+            '<polygon points="32,60 40,55 40,65" fill="#ef4444" />' +
+            '<polygon points="88,60 80,55 80,65" fill="#ef4444" />';
+        } else if (pose === "kick_ball") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="90" y2="82" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="69" y1="98" x2="88" y2="90" stroke="#ef4444" stroke-width="6" stroke-linecap="round" />' +
+            '<circle cx="92" cy="86" r="4.5" fill="#ef4444" />';
+        } else if (pose === "pushing") {
+          gesture =
+            '<line x1="45" y1="44" x2="28" y2="50" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="92" y2="50" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="26" y1="40" x2="26" y2="60" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />' +
+            '<line x1="94" y1="40" x2="94" y2="60" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />' +
+            '<path d="M18 50 L8 50 M102 50 L112 50" stroke="#ef4444" stroke-width="3" stroke-linecap="round" />';
+        } else if (pose === "holding" || pose === "illegal_hands") {
+          gesture =
+            '<path d="M45 44 L42 72 L70 64" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<line x1="75" y1="44" x2="70" y2="74" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<circle cx="70" cy="64" r="6.5" fill="#ef4444" />';
+        } else if (pose === "blocking") {
+          gesture =
+            '<path d="M45 44 L30 58 L48 68" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<path d="M75 44 L90 58 L72 68" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />' +
+            '<circle cx="48" cy="68" r="4.5" fill="#ef4444" />' +
+            '<circle cx="72" cy="68" r="4.5" fill="#ef4444" />';
+        } else if (pose === "charging") {
+          gesture =
+            '<path d="M45 44 L36 58 L56 56" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<path d="M75 44 L84 58 L66 56" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="55" y1="46" x2="55" y2="66" stroke="#ef4444" stroke-width="4" stroke-linecap="round" />' +
+            '<circle cx="66" cy="56" r="5.5" fill="#ef4444" />';
+        } else if (pose === "illegal_screen") {
+          gesture =
+            '<path d="M45 44 L34 56 L68 56" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<path d="M75 44 L86 56 L52 56" fill="none" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="48" y1="52" x2="72" y2="60" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round" />';
+        } else if (pose === "count") {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="98" y2="54" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<path d="M94 26 Q104 42 96 60" fill="none" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round" />' +
+            '<polygon points="96,65 90,56 102,57" fill="#ef4444" />';
+        } else if (pose === "nocount") {
+          gesture =
+            '<line x1="45" y1="44" x2="78" y2="62" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="42" y2="62" stroke="currentColor" stroke-width="5.5" stroke-linecap="round" />' +
+            '<path d="M36 62 L22 62 M84 62 L98 62" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round" />' +
+            '<polygon points="18,62 25,57 25,67" fill="#ef4444" />' +
+            '<polygon points="102,62 95,57 95,67" fill="#ef4444" />';
+        } else if (pose === "shot_1" || pose === "shot_2" || pose === "shot_3") {
+          var shotNum = pose === "shot_1" ? "1" : pose === "shot_2" ? "2" : "3";
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="100" y2="44" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<circle cx="105" cy="28" r="12" fill="#ef4444" />' +
+            '<text x="105" y="33" text-anchor="middle" font-size="14" font-weight="900" fill="#ffffff">' + shotNum + "</text>";
+        } else {
+          gesture =
+            '<line x1="45" y1="44" x2="36" y2="74" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<line x1="75" y1="44" x2="100" y2="44" stroke="currentColor" stroke-width="6" stroke-linecap="round" />' +
+            '<polygon points="114,44 100,36 100,52" fill="#ef4444" />';
+        }
+
+        return '<svg viewBox="0 0 120 120" width="92" height="92" aria-hidden="true">' + body + gesture + "</svg>";
+      }
+
+      // ==========================================
+      // 4. 3ステップ図解データ構築
+      // ==========================================
+      function buildThreeSteps(prompt) {
+        var teamColor = prompt.teamColor;
+        var jerseyNumber = prompt.jerseyNumber;
+        var call = prompt.call;
+        var fingerText = getFingerGuide(jerseyNumber);
+
+        // ノーカウント（AOS前のバイオレーション）
+        if (call.pose === "nocount_violation") {
+          return [
+            {
+              step: "STEP 1",
+              title: "クロック停止（停止）",
+              desc: "笛＋開いた手のひらを上げて時計停止",
+              svg: createRefereeSvg("stop_clock")
+            },
+            {
+              step: "STEP 2",
+              title: "ノーカウント（得点不成立）",
+              desc: "両腕を胸の前でクロスして左右に広げる",
+              svg: createRefereeSvg("nocount")
+            },
+            {
+              step: "STEP 3",
+              title: "スローイン方向指示",
+              desc: "相手ボール方向を指さす（番号不要）",
+              svg: createRefereeSvg("direction")
+            }
+          ];
+        }
+
+        // ノーカウント（AOS前のファウル）
+        if (call.pose === "nocount_foul") {
+          return [
+            {
+              step: "STEP 1",
+              title: "ファウル宣告",
+              desc: "笛＋握り拳をまっすぐ上げて時計停止",
+              svg: createRefereeSvg("foul_fist")
+            },
+            {
+              step: "STEP 2",
+              title: "ノーカウント（得点不成立）",
+              desc: "両腕を胸の前でクロスして左右に広げる",
+              svg: createRefereeSvg("nocount")
+            },
+            {
+              step: "STEP 3",
+              title: "背番号・方向指示",
+              desc: teamColor + jerseyNumber + "番提示＋スローイン方向",
+              svg: createRefereeSvg("number", teamColor + jerseyNumber)
+            }
+          ];
+        }
+
+        // カウント系（1ショット / ノーショット）
+        if (call.pose === "count_shot_1" || call.pose === "count_noshot") {
+          var step3Obj =
+            call.pose === "count_shot_1"
+              ? { step: "STEP 3", title: "1ショット", desc: "指1本を水平に提示", svg: createRefereeSvg("shot_1") }
+              : { step: "STEP 3", title: "スローイン方向", desc: "ノーショットで攻撃方向を指さす", svg: createRefereeSvg("direction") };
+
+          return [
+            {
+              step: "STEP 1",
+              title: "カウント（得点成立）",
+              desc: "片手を振り下ろしてバスケットカウント",
+              svg: createRefereeSvg("count")
+            },
+            {
+              step: "STEP 2",
+              title: teamColor + " " + jerseyNumber + "番",
+              desc: fingerText,
+              svg: createRefereeSvg("number", teamColor + jerseyNumber)
+            },
+            step3Obj
+          ];
+        }
+
+        // バイオレーション全般
+        if (call.isViolation) {
+          return [
+            {
+              step: "STEP 1",
+              title: "クロック停止",
+              desc: "笛＋開いた手のひらを上げて時計停止",
+              svg: createRefereeSvg("stop_clock")
+            },
+            {
+              step: "STEP 2",
+              title: call.name,
+              desc: "バイオレーションの種別シグナル",
+              svg: createRefereeSvg(call.pose)
+            },
+            {
+              step: "STEP 3",
+              title: "方向指示",
+              desc: "次の攻撃方向へ水平に指さす",
+              svg: createRefereeSvg("direction")
+            }
+          ];
+        }
+
+        // AOS中のショットファウル（2ショット / 3ショット）
+        if (call.pose === "shot_2" || call.pose === "shot_3") {
+          return [
+            {
+              step: "STEP 1",
+              title: "停止・ファウル宣告",
+              desc: "笛＋握り拳を上げてファウル宣告",
+              svg: createRefereeSvg("foul_fist")
+            },
+            {
+              step: "STEP 2",
+              title: teamColor + " " + jerseyNumber + "番",
+              desc: fingerText,
+              svg: createRefereeSvg("number", teamColor + jerseyNumber)
+            },
+            {
+              step: "STEP 3",
+              title: call.name,
+              desc: "フリースロー本数を水平に提示",
+              svg: createRefereeSvg(call.pose)
+            }
+          ];
+        }
+
+        // 通常のAOS前ファウル
+        return [
+          {
+            step: "STEP 1",
+            title: "番号: " + teamColor + " " + jerseyNumber + "番",
+            desc: "握り拳 → " + fingerText,
+            svg: createRefereeSvg("number", teamColor + jerseyNumber)
+          },
+          {
+            step: "STEP 2",
+            title: call.name,
+            desc: "ファウル種別シグナル",
+            svg: createRefereeSvg(call.pose)
+          },
+          {
+            step: "STEP 3",
+            title: "スローイン方向",
+            desc: "攻撃方向へ水平に指さす",
+            svg: createRefereeSvg("direction")
+          }
+        ];
+      }
+
+      // ==========================================
+      // 5. アプリ状態管理とDOM操作
+      // ==========================================
+      var state = {
+        count: 0,
+        current: null,
+        activeCategories: {
+          aos_foul: true,
+          pre_foul: true,
+          violation: true,
+          count: true
+        },
+        freqMode: "aos_focus", // "aos_focus" | "uniform" | "aos_intense"
+        alwaysShow: false,
+        answerOpen: false,
+        autoEnabled: false,
+        autoIntervalSec: 5,
+        autoRevealHalf: true,
+        autoHalfRevealed: false,
+        autoStart: 0,
+        rafId: null
+      };
+
+      function byId(id) {
+        return document.getElementById(id);
+      }
+
+      // タップ反応の視覚フィードバック（右上の緑ドットを一瞬光らせる）
+      function flashTapIndicator() {
+        var dot = byId("statusDot");
+        if (!dot) return;
+        dot.classList.add("is-flash");
+        setTimeout(function () {
+          dot.classList.remove("is-flash");
+        }, 160);
+      }
+
+      function pickWeightedCall(pool) {
+        var weighted = [];
+        var total = 0;
+        for (var i = 0; i < pool.length; i++) {
+          var item = pool[i];
+          var w = 1;
+          if (state.freqMode === "uniform") {
+            w = 1;
+          } else if (state.freqMode === "aos_intense") {
+            w = item.baseWeight > 1 ? item.baseWeight * 2 : 1;
+          } else {
+            w = item.baseWeight || 1;
+          }
+          weighted.push({ item: item, weight: w });
+          total += w;
+        }
+
+        var r = Math.random() * total;
+        for (var j = 0; j < weighted.length; j++) {
+          if (r < weighted[j].weight) {
+            return weighted[j].item;
+          }
+          r -= weighted[j].weight;
+        }
+        return weighted[0].item;
+      }
+
+      function getFilteredPool() {
+        var pool = [];
+        for (var i = 0; i < CALL_LIST.length; i++) {
+          var item = CALL_LIST[i];
+          var matched = false;
+          for (var c = 0; c < item.categories.length; c++) {
+            if (state.activeCategories[item.categories[c]]) {
+              matched = true;
+              break;
+            }
+          }
+          if (matched) pool.push(item);
+        }
+        return pool.length > 0 ? pool : CALL_LIST;
+      }
+
+      function renderPrompt() {
+        if (!state.current) return;
+        var teamColor = state.current.teamColor;
+        var jerseyNumber = state.current.jerseyNumber;
+        var call = state.current.call;
+
+        var countEl = byId("practiceCount");
+        if (countEl) countEl.textContent = String(state.count);
+
+        var cardEl = byId("promptCard");
+        if (cardEl) {
+          if (teamColor === "青") {
+            cardEl.classList.remove("theme-white");
+            cardEl.classList.add("theme-blue");
+          } else {
+            cardEl.classList.remove("theme-blue");
+            cardEl.classList.add("theme-white");
+          }
+        }
+
+        var badgeEl = byId("categoryBadge");
+        if (badgeEl) badgeEl.textContent = call.badge;
+
+        var fingerChipEl = byId("jerseyFingerShort");
+        if (fingerChipEl) {
+          fingerChipEl.textContent = call.isViolation
+            ? "バイオレーション（番号伝達不要）"
+            : "番号指: " + getFingerGuide(jerseyNumber);
+        }
+
+        var teamEl = byId("teamColorText");
+        if (teamEl) teamEl.textContent = teamColor;
+
+        var numEl = byId("jerseyNumberText");
+        if (numEl) numEl.textContent = jerseyNumber;
+
+        var callEl = byId("callNameText");
+        if (callEl) callEl.textContent = call.name;
+
+        var seqEl = byId("sequenceText");
+        if (seqEl) seqEl.textContent = call.sequence;
+
+        var footerEl = byId("guideFooter");
+        if (footerEl) {
+          var suffix = call.isViolation
+            ? "（※バイオレーションのため背番号伝達は不要です）"
+            : "（背番号 " + jerseyNumber + ": " + getFingerGuide(jerseyNumber) + "）";
+          footerEl.textContent = "【手順】" + call.detail + " " + suffix;
+        }
+
+        var steps = buildThreeSteps(state.current);
+        var html = "";
+        for (var i = 0; i < steps.length; i++) {
+          var s = steps[i];
+          html +=
+            '<div class="step-card">' +
+            '<div class="svg-frame">' + s.svg + "</div>" +
+            '<div class="step-card-text">' +
+            '<span class="step-badge">' + s.step + "</span>" +
+            '<div class="step-title">' + s.title + "</div>" +
+            '<div class="step-desc">' + s.desc + "</div>" +
+            "</div>" +
+            "</div>";
+        }
+        var gridEl = byId("stepsGrid");
+        if (gridEl) gridEl.innerHTML = html;
+
+        updateAnswerVisibility();
+      }
+
+      function updateAnswerVisibility() {
+        var panel = byId("answerPanel");
+        var label = byId("toggleAnswerLabel");
+        if (!panel || !label) return;
+        if (state.answerOpen) {
+          panel.classList.add("is-visible");
+          label.textContent = "🙈 答え・図解を隠す";
+        } else {
+          panel.classList.remove("is-visible");
+          label.textContent = "👁 答え・図解を見る";
+        }
+      }
+
+      // ==========================================
+      // 6. 自動送りループ制御
+      // ==========================================
+      function stopAutoLoop() {
+        if (state.rafId) {
+          cancelAnimationFrame(state.rafId);
+          state.rafId = null;
+        }
+        var fill = byId("progressFill");
+        if (fill) fill.style.width = "0%";
+        var cd = byId("autoCountdownText");
+        if (cd) cd.textContent = "手動モード";
+      }
+
+      function startAutoLoop() {
+        stopAutoLoop();
+        if (!state.autoEnabled) return;
+        state.autoStart = performance.now();
+        state.autoHalfRevealed = false;
+
+        function tick(now) {
+          if (!state.autoEnabled) return;
+          var elapsed = now - state.autoStart;
+          var duration = state.autoIntervalSec * 1000;
+          var ratio = Math.min(elapsed / duration, 1);
+          var rem = Math.max(0, (duration - elapsed) / 1000);
+
+          var fill = byId("progressFill");
+          if (fill) fill.style.width = (ratio * 100) + "%";
+
+          var cd = byId("autoCountdownText");
+          if (cd) cd.textContent = "自動送り中: 残り " + rem.toFixed(1) + "秒";
+
+          if (state.autoRevealHalf && !state.autoHalfRevealed && !state.answerOpen && ratio >= 0.5) {
+            state.autoHalfRevealed = true;
+            state.answerOpen = true;
+            updateAnswerVisibility();
+          }
+
+          if (ratio >= 1) {
+            window.appNextPrompt();
+          } else {
+            state.rafId = requestAnimationFrame(tick);
+          }
+        }
+        state.rafId = requestAnimationFrame(tick);
+      }
+
+      // ==========================================
+      // 7. グローバル公開ハンドラ（HTML onclick直結）
+      // ==========================================
+      window.appNextPrompt = function () {
+        flashTapIndicator();
+        var pool = getFilteredPool();
+        var candidate = null;
+
+        for (var attempt = 0; attempt < 15; attempt++) {
+          var teamColor = TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)];
+          var jerseyNumber = JERSEY_NUMBERS[Math.floor(Math.random() * JERSEY_NUMBERS.length)];
+          var call = pickWeightedCall(pool);
+          candidate = { teamColor: teamColor, jerseyNumber: jerseyNumber, call: call };
+          if (!state.current || state.current.call.name !== call.name) {
+            break;
+          }
+        }
+
+        state.current = candidate;
+        state.count += 1;
+        state.answerOpen = state.alwaysShow;
+        state.autoHalfRevealed = false;
+        renderPrompt();
+
+        if (state.autoEnabled) {
+          startAutoLoop();
+        }
+      };
+
+      window.appToggleAnswer = function () {
+        flashTapIndicator();
+        state.answerOpen = !state.answerOpen;
+        updateAnswerVisibility();
+      };
+
+      window.appSetFreqMode = function (mode) {
+        flashTapIndicator();
+        state.freqMode = mode;
+        var map = {
+          aos_focus: byId("freqFocusBtn"),
+          uniform: byId("freqUniformBtn"),
+          aos_intense: byId("freqIntenseBtn")
+        };
+        for (var k in map) {
+          if (map[k]) {
+            if (k === mode) map[k].classList.add("is-active");
+            else map[k].classList.remove("is-active");
+          }
+        }
+        window.appNextPrompt();
+      };
+
+      window.appToggleAuto = function () {
+        flashTapIndicator();
+        state.autoEnabled = !state.autoEnabled;
+        var btn = byId("autoToggleBtn");
+        if (btn) {
+          if (state.autoEnabled) {
+            btn.classList.add("is-active");
+            btn.textContent = "自動送り: ON";
+          } else {
+            btn.classList.remove("is-active");
+            btn.textContent = "自動送り: OFF";
+          }
+        }
+        if (state.autoEnabled) {
+          startAutoLoop();
+        } else {
+          stopAutoLoop();
+        }
+      };
+
+      window.appChangeInterval = function (val) {
+        flashTapIndicator();
+        state.autoIntervalSec = Number(val) || 5;
+        if (state.autoEnabled) {
+          startAutoLoop();
+        }
+      };
+
+      window.appToggleHalfReveal = function (checked) {
+        flashTapIndicator();
+        state.autoRevealHalf = Boolean(checked);
+      };
+
+      window.appToggleAlwaysShow = function () {
+        flashTapIndicator();
+        state.alwaysShow = !state.alwaysShow;
+        state.answerOpen = state.alwaysShow;
+        var btn = byId("alwaysShowBtn");
+        if (btn) {
+          if (state.alwaysShow) {
+            btn.classList.add("is-active");
+            btn.textContent = "常に答え（図解）を表示: ON";
+          } else {
+            btn.classList.remove("is-active");
+            btn.textContent = "常に答え（図解）を表示: OFF";
+          }
+        }
+        updateAnswerVisibility();
+      };
+
+      window.appToggleCategory = function (catKey) {
+        flashTapIndicator();
+        var warnEl = byId("filterWarning");
+        var activeCount = 0;
+        for (var k in state.activeCategories) {
+          if (state.activeCategories[k]) activeCount++;
+        }
+
+        if (state.activeCategories[catKey]) {
+          if (activeCount <= 1) {
+            if (warnEl) warnEl.textContent = "※ 少なくとも1つのカテゴリーを選択してください。";
+            return;
+          }
+          state.activeCategories[catKey] = false;
+        } else {
+          state.activeCategories[catKey] = true;
+        }
+
+        if (warnEl) warnEl.textContent = "";
+
+        var labels = {
+          aos_foul: "AOS中ファウル",
+          pre_foul: "AOS前ファウル",
+          violation: "バイオレーション",
+          count: "カウント・ノーカウント"
+        };
+
+        for (var key in labels) {
+          var chip = byId("chip_" + key);
+          if (chip) {
+            if (state.activeCategories[key]) {
+              chip.classList.add("is-selected");
+              chip.textContent = "✓ " + labels[key];
+            } else {
+              chip.classList.remove("is-selected");
+              chip.textContent = labels[key];
+            }
+          }
+        }
+
+        window.appNextPrompt();
+      };
+
+      // キーボードショートカット
+      document.addEventListener("keydown", function (e) {
+        if (e.target && (e.target.tagName === "SELECT" || e.target.tagName === "INPUT")) return;
+        if (e.code === "KeyA") {
+          e.preventDefault();
+          window.appToggleAnswer();
+        } else if (e.code === "Space" || e.code === "Enter") {
+          if (document.activeElement && document.activeElement.tagName === "BUTTON") return;
+          e.preventDefault();
+          window.appNextPrompt();
+        }
+      });
+
+      // 初回出題の実行
+      window.appNextPrompt();
+    })();
+  </script>
+</body>
+</html>
